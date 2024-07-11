@@ -1,11 +1,13 @@
-from random import choices, randint, random
+from random import choices, choice, randint, random
 
 class Graph:
     def __init__(self, file: str):
         self.v = 0
         self.e = 0
         
-        self.data = {}
+        self.max_colors = 0
+        
+        self.data: dict[list[int]] = {}
         
         self.file = file
         
@@ -27,21 +29,25 @@ class Graph:
                         self.data[vertex] = []
               
                     self.data[vertex].append(neighbor)
-
-# GAMBIARRA
-k = 8
+                    
+            for vertex in self.data:
+                self.max_colors = max(self.max_colors, len(self.data[vertex]))
 
 class State:
-    def __init__(self, graph: Graph, values: list[int]):
+    def __init__(self, graph: Graph, colors: int, values: list[int]):
         self.graph = graph
+        
+        self.colors = colors
         self.values = values
        
         self.fitness = self.calculate()
        
     @staticmethod
     def random(graph: Graph):
-        values = [randint(0, k - 1) for _ in range(graph.v)]
-        return State(graph, values)
+        colors = graph.max_colors
+        values = [randint(1, colors) for _ in range(graph.v)]
+        
+        return State(graph, colors, values)
        
     def calculate(self):
         fitness = 0
@@ -55,78 +61,140 @@ class State:
                 
         return fitness
       
-    def reproduce(self, other: 'State'):
-        pivot = randint(0, len(self.values) - 1)
-        return State(self.graph, self.values[:pivot] + other.values[pivot:])
-      
-    def mutate(self):
-        ''' ERRADO '''
-        
-        pivot = randint(0, len(self.values) - 1)
-        
-        values = self.values.copy()
-
-        values[pivot] = randint(0, k - 1)
-        
-        return State(self.graph, values)
-      
 class GeneticAlgorithm:
     def __init__(
         self, 
         graph: Graph, 
-        population_size=200, 
-        sample_size=10, 
-        mutation_rate=0.4, 
-        generations=10000
+        population_size=100, 
+        sample_size=10,
+        generations=10000,
+        improvements=25,
+        pc=0.9,
+        pm=0.1
     ):
         self.graph = graph
         self.population_size = population_size
         self.sample_size = sample_size
-        self.mutation_rate = mutation_rate
         self.generations = generations
+        self.improvements = improvements
+        self.pc = pc
+        self.pm = pm
         
     def selection(self, population: list[State]):
         sample = choices(population, k=self.sample_size)
-        return min(sample, key=lambda item: item.fitness)
+        return min(sample, key=lambda item: item.colors)
     
     def reproduce(self, x: State, y: State):
-        return x.reproduce(y), y.reproduce(x)
+        i = randint(0, len(x.values))
+        
+        x_ = State(self.graph, max(x.colors, y.colors), x.values[:i] + y.values[i:])
+        y_ = State(self.graph, max(x.colors, y.colors), y.values[:i] + x.values[i:])
+        
+        return x_, y_
     
-    def mutate(self, x: State):
-        return x.mutate()
+    def rep_op(self, x: State):
+        if x.fitness == 0:
+            return x
+        
+        colors = x.colors
+        values = x.values[:]
+        
+        for i in range(len(values)):
+            for j in range(len(values)):
+                if i != j:
+                    while values[i] == values[j]:
+                        values[j] = randint(1, colors)
+        
+        y = State(self.graph, colors, values)
+        
+        return min(x, y, key=lambda item: item.fitness)
+    
+    def repair(self, x: State):
+        for _ in range(self.improvements):
+            if x.fitness == 0:
+                break
+            
+            x = self.rep_op(x)
+            
+        return x
+    
+    def mp_sp_mutation(self, x: State):
+        colors = x.colors
+        values = x.values[:]
+        
+        remove = randint(1, colors)
+        
+        for i in range(len(values)):
+            if values[i] == remove:
+                values[i] = randint(1, colors - 1)
+                
+            elif values[i] > remove:
+                values[i] -= 1
+        
+        return State(self.graph, colors - 1, values)
     
     def run(self):
-        population = [State.random(self.graph) for _ in range(self.population_size)]
-        best = min(population, key=lambda item: item.fitness)
+        population: list[State] = []
         
-        for i in range(self.generations):
-            print(f'* STEPS: {i + 1} | COST: {best.fitness}')
+        # print('GENERATING INITIAL POPULATION...')
+        
+        while len(population) < self.population_size:
+            # print(f'POPULATION SIZE: {len(population)} / {self.population_size}')
+            
+            random_state = State.random(self.graph)
+            repaired_state = self.repair(random_state)
+            
+            if repaired_state.fitness == 0:
+                population.append(repaired_state)
+    
+        best = min(population, key=lambda item: item.colors)
+        
+        for _ in range(self.generations):
+            print(f'FITNESS: {best.fitness} | COLORS: {best.colors}')
             
             new_population: list[State] = []
             
-            for _ in range(self.population_size // 2):
+            # print('GENERATING NEW POPULATION...')
+                 
+            while len(new_population) < self.population_size:
+                # print(f'POPULATION SIZE: {len(new_population)} / {self.population_size}')
+                
                 x = self.selection(population)
                 y = self.selection(population)
                 
-                z1, z2 = self.reproduce(x, y)
+                if random() < self.pc:
+                    x, y = self.reproduce(x, y)
+                    
+                    x, y = self.repair(x), self.repair(y)
                 
-                if random() < self.mutation_rate:
-                    z1 = self.mutate(z1)
-                    
-                if random() < self.mutation_rate:
-                    z2 = self.mutate(z2)
-                    
-                new_population.append(z1)
-                new_population.append(z2)
+                if x.fitness == 0:
+                    if random() < self.pm:
+                        x = self.repair(self.mp_sp_mutation(x))
+                        
+                        if x.fitness == 0:
+                            new_population.append(x)
+                            
+                    else:
+                        new_population.append(x)
+                
+                if y.fitness == 0:
+                    if random() < self.pm:
+                        y = self.repair(self.mp_sp_mutation(y))
+                        
+                        if y.fitness == 0:
+                            new_population.append(y)
+                            
+                    else:
+                        new_population.append(y)
             
             population = new_population
-            best = min(population, key=lambda item: item.fitness)
+            best = min(population, key=lambda item: item.colors)
                      
         print(f'FITNESS: {best.fitness} | BEST: {best.values}')
                      
 if __name__ == '__main__':
-    graph = Graph('instances/queen7_7.col')
+    graph = Graph('instances/david.col')
     
     ga = GeneticAlgorithm(graph)
     
-    ga.run()    
+    ga.run()
