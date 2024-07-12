@@ -1,13 +1,17 @@
 from random import choices, choice, randint, random
+from time import time
 
 class Graph:
     def __init__(self, file: str):
         self.v = 0
         self.e = 0
         
-        self.max_colors = 0
+        self.max_colors = 1
+        self.max_vertex = 1
         
-        self.data: dict[list[int]] = {}
+        self.initial_colors: list[int] = []
+        
+        self.data: dict[int, list[int]] = {}
         
         self.file = file
         
@@ -31,7 +35,46 @@ class Graph:
                     self.data[vertex].append(neighbor)
                     
             for vertex in self.data:
-                self.max_colors = max(self.max_colors, len(self.data[vertex]))
+                if len(self.data[vertex]) > len(self.data[self.max_vertex]):
+                    self.max_vertex = vertex
+            
+            self.max_colors = len(self.data[self.max_vertex])
+
+            self.initial_colors = self._initial_colors()
+
+    def _initial_colors(self):
+        current = 1
+        
+        values = [0] * self.v
+    
+        values[self.max_vertex - 1] = current
+        
+        neighbors = self.data[self.max_vertex]
+    
+        print('MAX VERTEX:', self.max_vertex)
+        print('VALUES:', values)
+        
+        for vertex in neighbors:
+            if values[vertex - 1] != 0:
+                continue
+            
+            current += 1
+            
+            values[vertex - 1] = current
+            
+            for neighbor in neighbors:
+                if vertex == neighbor:
+                    continue
+                
+                if values[neighbor - 1] != 0:
+                    continue
+                
+                if vertex not in self.data[neighbor] and neighbor not in self.data[vertex]:
+                    values[neighbor - 1] = current
+
+        print('VALUES:', values)
+
+        return values
 
 class State:
     def __init__(self, graph: Graph, colors: int, values: list[int]):
@@ -40,8 +83,19 @@ class State:
         self.colors = colors
         self.values = values
        
-        self.fitness = self.calculate()
-       
+        self.fitness = self._fitness()
+    
+    @staticmethod
+    def random_heuristic(graph: Graph):
+        colors = graph.max_colors
+        values = graph.initial_colors[:]
+        
+        for i in range(len(values)):
+            if values[i] == 0:
+                values[i] = randint(1, colors)
+    
+        return State(graph, colors, values)
+    
     @staticmethod
     def random(graph: Graph):
         colors = graph.max_colors
@@ -49,7 +103,7 @@ class State:
         
         return State(graph, colors, values)
        
-    def calculate(self):
+    def _fitness(self):
         fitness = 0
         
         for vertex in self.graph.data:
@@ -68,9 +122,9 @@ class GeneticAlgorithm:
         population_size=100, 
         sample_size=10,
         generations=10000,
-        improvements=25,
+        improvements=5,
         pc=0.9,
-        pm=0.1
+        pm=0.2
     ):
         self.graph = graph
         self.population_size = population_size
@@ -99,11 +153,16 @@ class GeneticAlgorithm:
         colors = x.colors
         values = x.values[:]
         
-        for i in range(len(values)):
-            for j in range(len(values)):
-                if i != j:
-                    while values[i] == values[j]:
-                        values[j] = randint(1, colors)
+        for i in range(1, len(values) + 1):
+            if i not in self.graph.data:
+                continue
+            
+            for j in self.graph.data[i]:
+                while values[i - 1] == values[j - 1]:
+                    if self.graph.initial_colors[j - 1] == 0:
+                        values[j - 1] = randint(1, colors)
+                    else:
+                        values[i - 1] = randint(1, colors)
         
         y = State(self.graph, colors, values)
         
@@ -122,7 +181,7 @@ class GeneticAlgorithm:
         colors = x.colors
         values = x.values[:]
         
-        remove = randint(1, colors)
+        remove = randint(max(self.graph.initial_colors), colors)
         
         for i in range(len(values)):
             if values[i] == remove:
@@ -134,6 +193,8 @@ class GeneticAlgorithm:
         return State(self.graph, colors - 1, values)
     
     def run(self):
+        timer = time()
+        
         population: list[State] = []
         
         # print('GENERATING INITIAL POPULATION...')
@@ -141,10 +202,12 @@ class GeneticAlgorithm:
         while len(population) < self.population_size:
             # print(f'POPULATION SIZE: {len(population)} / {self.population_size}')
             
-            random_state = State.random(self.graph)
+            random_state = State.random_heuristic(self.graph)
             repaired_state = self.repair(random_state)
             
             if repaired_state.fitness == 0:
+                print(f'V: {repaired_state.values[:20]}')
+                
                 population.append(repaired_state)
     
         best = min(population, key=lambda item: item.colors)
@@ -189,11 +252,15 @@ class GeneticAlgorithm:
             
             population = new_population
             best = min(population, key=lambda item: item.colors)
+        
+        timer = time() - timer
+        
+        print('ELAPSED TIME:', timer)
                      
         print(f'FITNESS: {best.fitness} | BEST: {best.values}')
                      
 if __name__ == '__main__':
-    graph = Graph('instances/david.col')
+    graph = Graph('instances/queen6_6.col')
     
     ga = GeneticAlgorithm(graph)
     
