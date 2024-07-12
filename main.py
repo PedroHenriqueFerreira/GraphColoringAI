@@ -2,23 +2,23 @@ from random import choices, choice, randint, random
 from time import time
 
 class Graph:
+    ''' Classe que representa um grafo '''
+    
     def __init__(self, file: str):
-        self.v = 0
-        self.e = 0
+        self.v = 0 # Quantidade de vértices
+        self.e = 0 # Quantidade de arestas
         
-        self.max_colors = 1
-        self.min_colors = 1
-        self.max_vertex = 1
+        self.max_colors = 1 # Quantidade máxima de cores
         
-        self.initial_colors: list[int] = []
+        self.data: dict[int, list[int]] = {} # Dicionário de vértices e vizinhos
         
-        self.data: dict[int, list[int]] = {}
+        self.file = file # Arquivo de instância
         
-        self.file = file
-        
-        self.load()
+        self.load() # Carregar instância
         
     def load(self):
+        ''' Carrega os dados da instância '''
+        
         with open(self.file) as f:
             for line in f:
                 letter, *row = line.split()
@@ -35,101 +35,50 @@ class Graph:
               
                     self.data[vertex].append(neighbor)
                     
+            max_vertex = 1 # Define o vértice com mais vizinhos
+                    
             for vertex in self.data:
-                if len(self.data[vertex]) > len(self.data[self.max_vertex]):
-                    self.max_vertex = vertex
+                if len(self.data[vertex]) > len(self.data[max_vertex]):
+                    max_vertex = vertex
             
-            self.max_colors = len(self.data[self.max_vertex])
-
-            self.initial_colors = self._initial_colors()
-
-            self.min_colors = max(self.initial_colors)
-
-    def _initial_colors(self):
-        current = 1
-        
-        values = [0 for _ in range(self.v)]
-    
-        values[self.max_vertex - 1] = current
-        
-        neighbors = self.data[self.max_vertex]
-    
-        items: list[int] = []
-    
-        for vertex in neighbors:
-            if values[vertex - 1] != 0:
-                continue
-            
-            current += 1
-            
-            items = [vertex]
-            
-            values[vertex - 1] = current
-            
-            for neighbor in neighbors:
-                if vertex == neighbor:
-                    continue
-                
-                if values[neighbor - 1] != 0:
-                    continue
-                
-                if vertex not in self.data[neighbor] and neighbor not in self.data[vertex]:
-                    stop = False
-                    
-                    for item in items:
-                        if item in self.data[neighbor]:
-                            stop = True
-                            break
-                    
-                    if stop:
-                        continue
-                    
-                    items.append(neighbor)
-                    
-                    values[neighbor - 1] = current
-
-        return values
+            self.max_colors = len(self.data[max_vertex])
 
 class State:
+    ''' Classe que representa um estado do problema '''
+    
     def __init__(self, graph: Graph, colors: int, values: list[int]):
-        self.graph = graph
+        self.graph = graph # Grafo
         
-        self.colors = colors
-        self.values = values
+        self.colors = colors # Quantidade de cores
+        self.values = values # Valores dos vértices
        
-        self.fitness = self._fitness()
-    
-    @staticmethod
-    def random_heuristic(graph: Graph):
-        colors = graph.max_colors
-        values = graph.initial_colors[:]
-        
-        for i in range(len(values)):
-            if values[i] == 0:
-                values[i] = randint(1, colors)
-    
-        return State(graph, colors, values)
+        self.fitness = self._fitness() # Fitness (Enquanto maior, pior)
     
     @staticmethod
     def random(graph: Graph):
+        ''' Gera um estado aleatório '''
+        
         colors = graph.max_colors
         values = [randint(1, colors) for _ in range(graph.v)]
         
         return State(graph, colors, values)
        
     def _fitness(self):
+        ''' Calcula o fitness do estado '''
+        
         fitness = 0
         
         for vertex in self.graph.data:
             for neighbor in self.graph.data[vertex]:
-                if self.values[vertex - 1] != self.values[neighbor - 1]:
-                    continue
-                
-                fitness += 1
+                if self.values[vertex - 1] == self.values[neighbor - 1]:
+                    # Se o vertice tiver a mesma cor que o vizinho o fitness é incrementado
+                    fitness += 1
                 
         return fitness
       
 class GeneticAlgorithm:
+    ''' Classe que representa o algoritmo genético '''
+    
     def __init__(
         self, 
         graph: Graph, 
@@ -140,44 +89,52 @@ class GeneticAlgorithm:
         pc=0.9,
         pm=0.2
     ):
-        self.graph = graph
-        self.population_size = population_size
-        self.sample_size = sample_size
-        self.generations = generations
-        self.improvements = improvements
-        self.pc = pc
-        self.pm = pm
+        self.graph = graph # Grafo
+        self.population_size = population_size # Tamanho da população
+        self.sample_size = sample_size # Tamanho da amostra para seleção
+        self.generations = generations # Quantidade de gerações
+        self.improvements = improvements # Quantidade de melhorias
+        self.pc = pc # Probabilidade de crossover
+        self.pm = pm # Probabilidade de mutação
         
     def selection(self, population: list[State]):
-        sample = choices(population, k=self.sample_size)
-        return min(sample, key=lambda item: item.colors)
+        ''' Seleciona um indivíduo da população a partir de um torneio '''
+        
+        sample = choices(population, k=self.sample_size) # Amostra da população
+        return min(sample, key=lambda item: item.colors) # Indivíduo com menos cores na amostra
     
     def reproduce(self, x: State, y: State):
-        i = randint(0, len(x.values))
+        ''' Realiza o crossover entre dois indivíduos '''
         
-        x_ = State(self.graph, max(x.colors, y.colors), x.values[:i] + y.values[i:])
-        y_ = State(self.graph, max(x.colors, y.colors), y.values[:i] + x.values[i:])
+        i = randint(0, len(x.values)) # Ponto de corte
         
-        return x_, y_
+        colors = max(x.colors, y.colors) # Máximo de cores
+        
+        x_ = State(self.graph, colors, x.values[:i] + y.values[i:])
+        y_ = State(self.graph, colors, y.values[:i] + x.values[i:])
+        
+        return x_, y_ # 2 novos indivíduos
     
     def rep_op(self, x: State):
+        ''' Operador de reparo '''
+        
         colors = x.colors
-        values = x.values.copy()
+        values = x.values.copy() # Copia dos valores para não alterar o original
         
         for i in self.graph.data:
             for j in self.graph.data[i]:
-                
+                # Enquanto um vertice tiver a mesma cor que o vizinho, troca a cor do vizinho
                 while values[i - 1] == values[j - 1]:
-                    if self.graph.initial_colors[j - 1] == 0:
-                        values[j - 1] = randint(1, colors)
-                    else:
-                        values[i - 1] = randint(1, colors)
+                    values[j - 1] = randint(1, colors)
         
+        # Retorna um novo indivíduo
         y = State(self.graph, colors, values)
         
-        return min(x, y, key=lambda item: item.fitness)
+        return min(x, y, key=lambda item: item.fitness) # Caso haja melhoria, retorna o melhor
     
     def repair(self, x: State):
+        ''' Realiza a tentativa de reparo N vezes '''
+        
         for _ in range(self.improvements):
             if x.fitness == 0:
                 break
@@ -187,90 +144,106 @@ class GeneticAlgorithm:
         return x
     
     def mp_sp_mutation(self, x: State):
+        ''' 
+            Operador de mutação especial decrementando a quantidade de cores
+        
+            Exemplo de mutação especial:
+            estado = [1, 2, 3, 4, 5]
+            cor_a_ser_removida = 3
+            
+            resultado = [1, 2, aleatorio_entre(1, 4), 3, 4] 
+        '''
+        
         colors = x.colors
-        values = x.values[:]
+        values = x.values.copy() # Copia dos valores para não alterar o original
         
-        if graph.min_colors - 1 == colors:
-            return x
-        
-        remove = randint(graph.min_colors, colors)
+        remove = randint(1, colors) # Cor a ser removida
         
         for i in range(len(values)):
-            if values[i] == remove:
+            if values[i] == remove: # Se o vertice tiver a cor a ser removida troca por uma cor aleatória
                 values[i] = randint(1, colors - 1)
                 
-            elif values[i] > remove:
+            elif values[i] > remove: # Se o vertice tiver uma cor maior que a removida, decrementa
                 values[i] -= 1
         
         return State(self.graph, colors - 1, values)
     
     def run(self):
-        timer = time()
+        ''' Executa o algoritmo genético '''
+        
+        timer = time() # Inicia o cronômetro
         
         population: list[State] = []
         
-        # print('GENERATING INITIAL POPULATION...')
+        print('GENERATING INITIAL POPULATION...')
 
-        while len(population) < self.population_size:
-            # print(f'POPULATION SIZE: {len(population)} / {self.population_size}')
+        while len(population) < self.population_size: # Gera a população até atingir o tamanho desejado
+            print(f'POPULATION SIZE: {len(population)} / {self.population_size}')
             
-            random_state = State.random_heuristic(self.graph)
-            random_state = self.repair(random_state)
+            random_state = self.repair(State.random(self.graph))
             
-            if random_state.fitness == 0:
+            if random_state.fitness == 0: # Se o estado for válido, adiciona à população
                 population.append(random_state)
     
-        best = min(population, key=lambda item: item.colors)
+        best = min(population, key=lambda item: item.colors) # Melhor indivíduo
         
-        for idx in range(self.generations):
-            print(f'IDX: {idx} | FITNESS: {best.fitness} | COLORS: {best.colors}')
+        for i in range(self.generations): # Para cada geração
+            print(f'I: {i} | FITNESS: {best.fitness} | COLORS: {best.colors}')
             
             new_population: list[State] = []
             
             # print('GENERATING NEW POPULATION...')
                  
-            while len(new_population) < self.population_size:
+            while len(new_population) < self.population_size: # Gera a nova população até atingir o tamanho desejado
                 # print(f'POPULATION SIZE: {len(new_population)} / {self.population_size}')
                 
-                x = self.selection(population)
-                y = self.selection(population)
+                x = self.selection(population) # Seleciona um indivíduo
+                y = self.selection(population) # Seleciona outro indivíduo
                 
-                if random() < self.pc:
-                    x, y = self.reproduce(x, y)
+                if random() < self.pc: # Se a probabilidade de crossover for atingida
+                    x, y = self.reproduce(x, y) # Realiza o crossover
                     
-                    x, y = self.repair(x), self.repair(y)
+                    x, y = self.repair(x), self.repair(y) # Realiza o reparo dos indivíduos
                 
-                if x.fitness == 0:
-                    if random() < self.pm:
-                        x = self.repair(self.mp_sp_mutation(x))
+                for ind in [x, y]: # Para cada indivíduo gerado
+                    if ind.fitness != 0: # Se o indivíduo for inválido pulamos para o próximo
+                        continue
+                    
+                    if random() < self.pm: # Se a probabilidade de mutação for atingida
+                        ind = self.repair(self.mp_sp_mutation(ind)) # Realiza a mutação especial
                         
-                        if x.fitness == 0:
-                            new_population.append(x)
-                            
-                    else:
-                        new_population.append(x)
-                
-                if y.fitness == 0:
-                    if random() < self.pm:
-                        y = self.repair(self.mp_sp_mutation(y))
-                        
-                        if y.fitness == 0:
-                            new_population.append(y)
-                            
-                    else:
-                        new_population.append(y)
+                        if ind.fitness == 0: # Se o indivíduo for válido, adiciona à nova população
+                            new_population.append(ind)
+                    
+                    else: # Se não realizar a mutação, adiciona à nova população
+                        new_population.append(ind)
             
-            population = new_population
-            best = min(population, key=lambda item: item.colors)
+            population = new_population # Atualiza a população
+            best = min(population, key=lambda item: item.colors) # Atualiza o melhor indivíduo
         
-        timer = time() - timer
+        timer = time() - timer # Finaliza o cronômetro
         
         print('ELAPSED TIME:', timer)
                      
         print(f'FITNESS: {best.fitness} | BEST: {best.values}')
+          
+class GoldenBall:
+    def __init__(
+        self,
+        graph: Graph, 
+        tn=10, # Quantidade de times (Team Number)
+        pt=50, # Quantidade de players por time (Players per Team)
+        
+        sample_size=10,
+        generations=10000,
+        improvements=5,
+        pc=0.9,
+        pm=0.2
+    ):
+        ...
                      
 if __name__ == '__main__':
-    graph = Graph('instances/huck.col')
+    graph = Graph('instances/miles1000.col')
     
     ga = GeneticAlgorithm(graph)
     
