@@ -7,6 +7,7 @@ class Graph:
         self.e = 0
         
         self.max_colors = 1
+        self.min_colors = 1
         self.max_vertex = 1
         
         self.initial_colors: list[int] = []
@@ -42,23 +43,26 @@ class Graph:
 
             self.initial_colors = self._initial_colors()
 
+            self.min_colors = max(self.initial_colors)
+
     def _initial_colors(self):
         current = 1
         
-        values = [0] * self.v
+        values = [0 for _ in range(self.v)]
     
         values[self.max_vertex - 1] = current
         
         neighbors = self.data[self.max_vertex]
     
-        print('MAX VERTEX:', self.max_vertex)
-        print('VALUES:', values)
-        
+        items: list[int] = []
+    
         for vertex in neighbors:
             if values[vertex - 1] != 0:
                 continue
             
             current += 1
+            
+            items = [vertex]
             
             values[vertex - 1] = current
             
@@ -70,9 +74,19 @@ class Graph:
                     continue
                 
                 if vertex not in self.data[neighbor] and neighbor not in self.data[vertex]:
+                    stop = False
+                    
+                    for item in items:
+                        if item in self.data[neighbor]:
+                            stop = True
+                            break
+                    
+                    if stop:
+                        continue
+                    
+                    items.append(neighbor)
+                    
                     values[neighbor - 1] = current
-
-        print('VALUES:', values)
 
         return values
 
@@ -147,17 +161,12 @@ class GeneticAlgorithm:
         return x_, y_
     
     def rep_op(self, x: State):
-        if x.fitness == 0:
-            return x
-        
         colors = x.colors
-        values = x.values[:]
+        values = x.values.copy()
         
-        for i in range(1, len(values) + 1):
-            if i not in self.graph.data:
-                continue
-            
+        for i in self.graph.data:
             for j in self.graph.data[i]:
+                
                 while values[i - 1] == values[j - 1]:
                     if self.graph.initial_colors[j - 1] == 0:
                         values[j - 1] = randint(1, colors)
@@ -181,7 +190,10 @@ class GeneticAlgorithm:
         colors = x.colors
         values = x.values[:]
         
-        remove = randint(max(self.graph.initial_colors), colors)
+        if graph.min_colors - 1 == colors:
+            return x
+        
+        remove = randint(graph.min_colors, colors)
         
         for i in range(len(values)):
             if values[i] == remove:
@@ -198,22 +210,20 @@ class GeneticAlgorithm:
         population: list[State] = []
         
         # print('GENERATING INITIAL POPULATION...')
-        
+
         while len(population) < self.population_size:
             # print(f'POPULATION SIZE: {len(population)} / {self.population_size}')
             
             random_state = State.random_heuristic(self.graph)
-            repaired_state = self.repair(random_state)
+            random_state = self.repair(random_state)
             
-            if repaired_state.fitness == 0:
-                print(f'V: {repaired_state.values[:20]}')
-                
-                population.append(repaired_state)
+            if random_state.fitness == 0:
+                population.append(random_state)
     
         best = min(population, key=lambda item: item.colors)
         
-        for _ in range(self.generations):
-            print(f'FITNESS: {best.fitness} | COLORS: {best.colors}')
+        for idx in range(self.generations):
+            print(f'IDX: {idx} | FITNESS: {best.fitness} | COLORS: {best.colors}')
             
             new_population: list[State] = []
             
@@ -260,7 +270,7 @@ class GeneticAlgorithm:
         print(f'FITNESS: {best.fitness} | BEST: {best.values}')
                      
 if __name__ == '__main__':
-    graph = Graph('instances/queen6_6.col')
+    graph = Graph('instances/huck.col')
     
     ga = GeneticAlgorithm(graph)
     
