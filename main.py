@@ -231,20 +231,101 @@ class GoldenBall:
     def __init__(
         self,
         graph: Graph, 
-        tn=10, # Quantidade de times (Team Number)
-        pt=50, # Quantidade de players por time (Players per Team)
+        tn=10,
+        pt=10,
+        improvements=5,
         
         sample_size=10,
         generations=10000,
-        improvements=5,
         pc=0.9,
         pm=0.2
     ):
+        self.graph = graph # Grafo
+        self.tn = tn # Quantidade de times
+        self.pt = pt # Quantidade de jogadores por time
+        self.improvements = improvements # Quantidade de melhorias
         ...
+       
+    def rep_op(self, x: State):
+        ''' Operador de reparo '''
+        
+        values = x.values.copy() # Copia dos valores para não alterar o original
+        
+        for i in self.graph.data:
+            for j in self.graph.data[i]:
+                # Enquanto um vertice tiver a mesma cor que o vizinho, troca a cor do vizinho
+                while values[i - 1] == values[j - 1]:
+                    values[j - 1] = randint(1, x.colors)
+        
+        # Retorna um novo indivíduo
+        y = State(self.graph, x.colors, values)
+        
+        return min(x, y, key=lambda item: item.fitness) # Caso haja melhoria, retorna o melhor
+    
+    def repair(self, x: State):
+        ''' Realiza a tentativa de reparo N vezes '''
+        
+        for _ in range(self.improvements):
+            if x.fitness == 0:
+                break
+            
+            x = self.rep_op(x)
+            
+        return x
+    
+    def mp_sp_mutation(self, x: State):
+        ''' 
+            Operador de mutação especial decrementando a quantidade de cores
+        
+            Exemplo de mutação especial:
+            estado = [1, 2, 3, 4, 5]
+            cor_a_ser_removida = 3
+            
+            resultado = [1, 2, aleatorio_entre(1, 4), 3, 4] 
+        '''
+        
+        colors = x.colors
+        values = x.values.copy() # Copia dos valores para não alterar o original
+        
+        remove = randint(1, colors) # Cor a ser removida
+        
+        for i in range(len(values)):
+            if values[i] == remove: # Se o vertice tiver a cor a ser removida troca por uma cor aleatória
+                values[i] = randint(1, colors - 1)
+                
+            elif values[i] > remove: # Se o vertice tiver uma cor maior que a removida, decrementa
+                values[i] -= 1
+        
+        return State(self.graph, colors - 1, values)
+          
+    def run(self):
+        population: list[list[State]] = []
+        
+        for _ in range(self.tn):
+            team = []
+
+            while len(team) < self.pt:
+                random_state = self.repair(State.random(self.graph))
+                
+                if random_state.fitness == 0:
+                    team.append(random_state)
+                    
+            population.append(team)
+            
+        while True: # Enquanto não atingir a condição de parada
+            team_fitness = [0] * self.tn
+            
+            for j in [1, 2]:
+                ...                
+            
                      
 if __name__ == '__main__':
     graph = Graph('instances/miles1000.col')
     
-    ga = GeneticAlgorithm(graph)
+    # ga = GeneticAlgorithm(graph)
     
-    ga.run()
+    # ga.run()
+    
+    gb = GoldenBall(graph)
+    
+    gb.run()
